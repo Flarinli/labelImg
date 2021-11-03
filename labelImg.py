@@ -76,7 +76,7 @@ class WindowMixin(object):
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
-    def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None):
+    def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None): # TODO: default_save_dir
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
@@ -1111,7 +1111,8 @@ class MainWindow(QMainWindow, WindowMixin):
             self.show_bounding_box_from_annotation_file(file_path)
 
             counter = self.counter_str()
-            self.setWindowTitle(__appname__ + ' ' + file_path + ' ' + counter)
+            img_size = self.image.size()
+            self.setWindowTitle(f'{__appname__} {file_path} {counter} size of image: {img_size.width()}x{img_size.height()}')
 
             # Default : select last item if there is at least one item
             if self.label_list.count():
@@ -1162,7 +1163,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def paint_canvas(self):
         assert not self.image.isNull(), "cannot paint null image"
         self.canvas.scale = 0.01 * self.zoom_widget.value()
-        self.canvas.label_font_size = int(0.02 * max(self.image.width(), self.image.height()))
+        self.canvas.label_font_size = int(0.002 * max(self.image.width(), self.image.height())) # TODO: Изменен размер шрифта!
         self.canvas.adjustSize()
         self.canvas.update()
 
@@ -1294,6 +1295,7 @@ class MainWindow(QMainWindow, WindowMixin):
             return
 
         self.last_open_dir = dir_path
+        self.default_save_dir = dir_path #TODO: соответствовать заданной структуре!
         self.dir_name = dir_path
         self.file_path = None
         self.file_list_widget.clear()
@@ -1385,9 +1387,12 @@ class MainWindow(QMainWindow, WindowMixin):
         if filename:
             if isinstance(filename, (tuple, list)):
                 filename = filename[0]
+
+            self.default_save_dir = os.path.dirname(filename) #TODO: переделать под требуемую структуру
             self.cur_img_idx = 0
             self.img_count = 1
             self.load_file(filename)
+            
 
     def save_file(self, _value=False):
         if self.default_save_dir is not None and len(ustr(self.default_save_dir)):
