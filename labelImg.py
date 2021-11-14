@@ -76,7 +76,7 @@ class WindowMixin(object):
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
-    def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None): # TODO: default_save_dir
+    def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
@@ -385,7 +385,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Auto saving : Enable auto saving if pressing next
         self.auto_saving = QAction(get_str('autoSaveMode'), self)
         self.auto_saving.setCheckable(True)
-        self.auto_saving.setChecked(settings.get(SETTING_AUTO_SAVE, False))
+        self.auto_saving.setChecked(settings.get(SETTING_AUTO_SAVE, True))
         # Sync single class mode from PR#106
         self.single_class_mode = QAction(get_str('singleClsMode'), self)
         self.single_class_mode.setShortcut("Ctrl+Shift+S")
@@ -396,7 +396,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.display_label_option = QAction(get_str('displayLabel'), self)
         self.display_label_option.setShortcut("Ctrl+Shift+P")
         self.display_label_option.setCheckable(True)
-        self.display_label_option.setChecked(settings.get(SETTING_PAINT_LABEL, False))
+        self.display_label_option.setChecked(settings.get(SETTING_PAINT_LABEL, True))
         self.display_label_option.triggered.connect(self.toggle_paint_labels_option)
 
         add_actions(self.menus.file,
@@ -504,10 +504,11 @@ class MainWindow(QMainWindow, WindowMixin):
         # Display cursor coordinates at the right of status bar
         self.label_coordinates = QLabel('')
         self.statusBar().addPermanentWidget(self.label_coordinates)
-
+        recent_files = settings.get(SETTING_RECENT_FILES)
+        self.file_path = recent_files[0] if recent_files else None
         # Open Dir if default file
-        if self.file_path and os.path.isdir(self.file_path):
-            self.open_dir_dialog(dir_path=self.file_path, silent=True)
+        if self.file_path and os.path.isdir(os.path.dirname(self.file_path)):
+            self.import_dir_images(file_path=self.file_path)
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
@@ -962,13 +963,13 @@ class MainWindow(QMainWindow, WindowMixin):
     def scroll_request(self, delta, orientation):
         units = - delta / (8 * 15)
         bar = self.scroll_bars[orientation]
-        bar.setValue(bar.value() + bar.singleStep() * units)
+        bar.setValue(int(bar.value() + bar.singleStep() * units))
 
     def set_zoom(self, value):
         self.actions.fitWidth.setChecked(False)
         self.actions.fitWindow.setChecked(False)
         self.zoom_mode = self.MANUAL_ZOOM
-        self.zoom_widget.setValue(value)
+        self.zoom_widget.setValue(int(value))
 
     def add_zoom(self, increment=10):
         self.set_zoom(self.zoom_widget.value() + increment)
@@ -1022,8 +1023,8 @@ class MainWindow(QMainWindow, WindowMixin):
         new_h_bar_value = h_bar.value() + move_x * d_h_bar_max
         new_v_bar_value = v_bar.value() + move_y * d_v_bar_max
 
-        h_bar.setValue(new_h_bar_value)
-        v_bar.setValue(new_v_bar_value)
+        h_bar.setValue(int(new_h_bar_value))
+        v_bar.setValue(int(new_v_bar_value))
 
     def set_fit_window(self, value=True):
         if value:
@@ -1120,6 +1121,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.label_list.item(self.label_list.count() - 1).setSelected(True)
 
             self.canvas.setFocus(True)
+            self.default_save_dir = os.path.dirname(file_path) #TODO: переделать под требуемую структуру
             return True
         return False
 
@@ -1163,7 +1165,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def paint_canvas(self):
         assert not self.image.isNull(), "cannot paint null image"
         self.canvas.scale = 0.01 * self.zoom_widget.value()
-        self.canvas.label_font_size = int(0.002 * max(self.image.width(), self.image.height())) # TODO: Изменен размер шрифта!
+        self.canvas.label_font_size = int(0.009 * max(self.image.width(), self.image.height()))
         self.canvas.adjustSize()
         self.canvas.update()
 
@@ -1224,7 +1226,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def load_recent(self, filename):
         if self.may_continue():
-            self.load_file(filename)
+            self.import_dir_images(file_path=filename)
 
     def scan_all_images(self, folder_path):
         extensions = ['.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
@@ -1236,7 +1238,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     relative_path = os.path.join(root, file)
                     path = ustr(os.path.abspath(relative_path))
                     images.append(path)
-        natural_sort(images, key=lambda x: x.lower())
+        natural_sort(images, key=lambda x: os.path.normpath(x.lower()))
         return images
 
     def change_save_dir_dialog(self, _value=False):
@@ -1288,20 +1290,30 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             target_dir_path = ustr(default_open_dir_path)
         self.last_open_dir = target_dir_path
-        self.import_dir_images(target_dir_path)
+        self.import_dir_images(dir_path=target_dir_path)
 
-    def import_dir_images(self, dir_path):
-        if not self.may_continue() or not dir_path:
+    def import_dir_images(self, dir_path=None, file_path=None):
+        """Opens the dir with specified file if it is specified, otherwise the first file in specified dir"""
+        if not self.may_continue() or (not dir_path and not file_path):
             return
+        # file_path has a higher priority than dir_path
+        if file_path:
+            file_path = os.path.normpath(ustr(file_path))
+            dir_path = os.path.dirname(file_path)
 
         self.last_open_dir = dir_path
         self.default_save_dir = dir_path #TODO: соответствовать заданной структуре!
         self.dir_name = dir_path
-        self.file_path = None
+        self.file_path = file_path
         self.file_list_widget.clear()
         self.m_img_list = self.scan_all_images(dir_path)
         self.img_count = len(self.m_img_list)
-        self.open_next_image()
+        try:
+            self.cur_img_idx = self.m_img_list.index(self.file_path)
+        except ValueError:
+            self.cur_img_idx = 0
+        if self.cur_img_idx in range(self.img_count):
+            self.load_file(self.m_img_list[self.cur_img_idx])
         for imgPath in self.m_img_list:
             item = QListWidgetItem(imgPath)
             self.file_list_widget.addItem(item)
@@ -1350,7 +1362,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.load_file(filename)
 
     def open_next_image(self, _value=False):
-        # Proceeding prev image without dialog if having any label
+        # Proceeding next image without dialog if having any label
         if self.auto_saving.isChecked():
             if self.default_save_dir is not None:
                 if self.dirty is True:
@@ -1387,12 +1399,7 @@ class MainWindow(QMainWindow, WindowMixin):
         if filename:
             if isinstance(filename, (tuple, list)):
                 filename = filename[0]
-
-            self.default_save_dir = os.path.dirname(filename) #TODO: переделать под требуемую структуру
-            self.cur_img_idx = 0
-            self.img_count = 1
-            self.load_file(filename)
-            
+            self.import_dir_images(file_path=filename)
 
     def save_file(self, _value=False):
         if self.default_save_dir is not None and len(ustr(self.default_save_dir)):
@@ -1487,7 +1494,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def current_path(self):
         return os.path.dirname(self.file_path) if self.file_path else '.'
 
-    def choose_color1(self):
+    def choose_color1(self):  #TODO: Изменить прозрачность цветов
         color = self.color_dialog.getColor(self.line_color, u'Choose line color',
                                            default=DEFAULT_LINE_COLOR)
         if color:
