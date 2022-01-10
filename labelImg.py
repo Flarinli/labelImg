@@ -50,6 +50,8 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
+from libs.file_slider_widget import FileSliderWidget
+
 
 __appname__ = 'labelImg'
 
@@ -109,9 +111,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self._no_selection_slot = False
         self._beginner = True
         self.screencast = "https://youtu.be/p0nR2YsCY_U"
-
-        # Load predefined classes to the list
-        self.load_predefined_classes(default_prefdef_class_file)
 
         # Main widgets and related state.
         self.label_dialog = LabelDialog(parent=self, list_item=self.label_hist)
@@ -181,6 +180,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.color_dialog = ColorDialog(parent=self)
 
         self.canvas = Canvas(parent=self)
+        list_layout.addItem(QVBoxLayout(self.canvas))
         self.canvas.zoomRequest.connect(self.zoom_request)
         self.canvas.set_drawing_shape_to_square(settings.get(SETTING_DRAW_SQUARE, False))
 
@@ -198,6 +198,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.shapeMoved.connect(self.set_dirty)
         self.canvas.selectionChanged.connect(self.shape_selection_changed)
         self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
+        self.file_scroller = FileSliderWidget(1, 1, self)
+        list_layout.addWidget(self.file_scroller) # TODO: relocate file_scroller widget to bottom
 
         self.setCentralWidget(scroll)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
@@ -734,7 +736,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
-        self.cur_img_idx = self.m_img_list.index(ustr(item.text()))
+        self.cur_img_idx = self.m_img_list.index(ustr(re.sub(r'\w+\. ', '', item.text())))
         filename = self.m_img_list[self.cur_img_idx]
         if filename:
             self.load_file(filename)
@@ -1122,7 +1124,8 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.label_list.item(self.label_list.count() - 1).setSelected(True)
 
             self.canvas.setFocus(True)
-            self.default_save_dir = os.path.dirname(file_path) #TODO: переделать под требуемую структуру
+            # self.default_save_dir = os.path.dirname(file_path)
+            self.file_scroller.file_changed(self.cur_img_idx)
             return True
         return False
 
@@ -1208,10 +1211,10 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_FILL_COLOR] = self.fill_color
         settings[SETTING_RECENT_FILES] = self.recent_files
         settings[SETTING_ADVANCE_MODE] = not self._beginner
-        if self.default_save_dir and os.path.exists(self.default_save_dir):
-            settings[SETTING_SAVE_DIR] = ustr(self.default_save_dir)
-        else:
-            settings[SETTING_SAVE_DIR] = ''
+        # if self.default_save_dir and os.path.exists(self.default_save_dir):
+        #     settings[SETTING_SAVE_DIR] = ustr(self.default_save_dir)
+        # else:
+        #     settings[SETTING_SAVE_DIR] = ''
 
         if self.last_open_dir and os.path.exists(self.last_open_dir):
             settings[SETTING_LAST_OPEN_DIR] = self.last_open_dir
@@ -1303,21 +1306,34 @@ class MainWindow(QMainWindow, WindowMixin):
             dir_path = os.path.dirname(file_path)
 
         self.last_open_dir = dir_path
-        self.default_save_dir = dir_path #TODO: соответствовать заданной структуре!
+        tmp_path = os.path.join(os.path.dirname(dir_path), 'label_files')
+        if not os.path.exists(tmp_path):
+            os.mkdir(tmp_path)
+        self.default_save_dir = tmp_path
         self.dir_name = dir_path
         self.file_path = file_path
         self.file_list_widget.clear()
         self.m_img_list = self.scan_all_images(dir_path)
         self.img_count = len(self.m_img_list)
+        self.file_scroller.set_max_value(self.img_count)
+
         try:
             self.cur_img_idx = self.m_img_list.index(self.file_path)
         except ValueError:
             self.cur_img_idx = 0
+
         if self.cur_img_idx in range(self.img_count):
             self.load_file(self.m_img_list[self.cur_img_idx])
-        for imgPath in self.m_img_list:
-            item = QListWidgetItem(imgPath)
+        self.file_list_widget.clear()
+        for index, imgPath in enumerate(self.m_img_list):
+            item = QListWidgetItem(f'{index + 1}. {imgPath}')
             self.file_list_widget.addItem(item)
+
+        try:
+            path = os.path.join(os.path.dirname(self.default_save_dir), 'predefined_classes.txt')
+            self.load_predefined_classes(path)
+        except ValueError as e:
+            pass
 
     def verify_image(self, _value=False):
         # Proceeding next image without dialog if having any label
@@ -1408,6 +1424,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 image_file_name = os.path.basename(self.file_path)
                 saved_file_name = os.path.splitext(image_file_name)[0]
                 saved_path = os.path.join(ustr(self.default_save_dir), saved_file_name)
+                print(image_file_name, saved_file_name, saved_path, self.default_save_dir)
                 self._save_file(saved_path)
         else:
             image_file_dir = os.path.dirname(self.file_path)
@@ -1546,6 +1563,8 @@ class MainWindow(QMainWindow, WindowMixin):
                         self.label_hist = [line]
                     else:
                         self.label_hist.append(line)
+        else:
+            raise ValueError(f"predefined_classes.txt must be in directory {os.path.dirname(predef_classes_file)}")
 
     def load_pascal_xml_by_filename(self, xml_path):
         if self.file_path is None:
