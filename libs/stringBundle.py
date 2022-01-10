@@ -27,9 +27,11 @@ class StringBundle:
     def __init__(self, create_key, locale_str):
         assert(create_key == StringBundle.__create_key), "StringBundle must be created using StringBundle.getBundle"
         self.id_to_message = {}
-        paths = self.__create_lookup_fallback_list(locale_str)
-        for path in paths:
-            self.__load_bundle(path)
+        # paths = self.__create_lookup_fallback_list(locale_str)
+        # for path in paths:
+        #     self.__load_bundle(path)
+        path = os.path.normpath('resources/strings/strings.properties')
+        self.__load_bundle(path)
 
     @classmethod
     def get_bundle(cls, locale_str=None):
@@ -57,7 +59,6 @@ class StringBundle:
             for tag in tags:
                 last_path = result_paths[-1]
                 result_paths.append(last_path + '-' + tag)
-
         return result_paths
 
     def __load_bundle(self, path):

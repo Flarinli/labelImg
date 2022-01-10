@@ -85,7 +85,7 @@ def generate_color_by_text(text):
     r = int((hash_code / 255) % 255)
     g = int((hash_code / 65025) % 255)
     b = int((hash_code / 16581375) % 255)
-    return QColor(r, g, b, 100)
+    return QColor(r, g, b, 180)
 
 
 def have_qstring():

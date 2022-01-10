@@ -89,7 +89,7 @@ class Shape(object):
             color = self.select_line_color if self.selected else self.line_color
             pen = QPen(color)
             # Try using integer sizes for smoother drawing(?)
-            pen.setWidth(max(1, int(round(2.0 / self.scale))))
+            pen.setWidth(max(1, int(round(4.0 / self.scale))))
             painter.setPen(pen)
 
             line_path = QPainterPath()
@@ -115,7 +115,7 @@ class Shape(object):
             if self.paint_label:
                 min_x = sys.maxsize
                 min_y = sys.maxsize
-                min_y_label = int(1.25 * self.label_font_size)
+                min_y_label = int(self.label_font_size)
                 for point in self.points:
                     min_x = min(min_x, point.x())
                     min_y = min(min_y, point.y())

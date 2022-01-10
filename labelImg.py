@@ -224,6 +224,7 @@ class MainWindow(QMainWindow, WindowMixin):
         open_annotation = action(get_str('openAnnotation'), self.open_annotation_dialog,
                                  'Ctrl+Shift+O', 'open', get_str('openAnnotationDetail'))
         copy_prev_bounding = action(get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+v', 'copy', get_str('copyPrevBounding'))
+        copy_next_bounding = action(get_str('copyNextBounding'), self.copy_next_bounding_boxes, 'Ctrl+Shift+v', 'copy', get_str('copyNextBounding'))
 
         open_next_image = action(get_str('nextImg'), self.open_next_image,
                                  'd', 'next', get_str('nextImgDetail'))
@@ -400,7 +401,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.display_label_option.triggered.connect(self.toggle_paint_labels_option)
 
         add_actions(self.menus.file,
-                    (open, open_dir, change_save_dir, open_annotation, copy_prev_bounding, self.menus.recentFiles, save, save_format, save_as, close, reset_all, delete_image, quit))
+                    (open, open_dir, change_save_dir, open_annotation, copy_prev_bounding, copy_next_bounding, self.menus.recentFiles, save, save_format, save_as, close, reset_all, delete_image, quit))
         add_actions(self.menus.help, (help_default, show_info, show_shortcut))
         add_actions(self.menus.view, (
             self.auto_saving,
@@ -1165,7 +1166,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def paint_canvas(self):
         assert not self.image.isNull(), "cannot paint null image"
         self.canvas.scale = 0.01 * self.zoom_widget.value()
-        self.canvas.label_font_size = int(0.009 * max(self.image.width(), self.image.height()))
+        self.canvas.label_font_size = int(0.03 * max(self.image.width(), self.image.height()))
         self.canvas.adjustSize()
         self.canvas.update()
 
@@ -1494,7 +1495,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def current_path(self):
         return os.path.dirname(self.file_path) if self.file_path else '.'
 
-    def choose_color1(self):  #TODO: Изменить прозрачность цветов
+    def choose_color1(self):
         color = self.color_dialog.getColor(self.line_color, u'Choose line color',
                                            default=DEFAULT_LINE_COLOR)
         if color:
@@ -1589,7 +1590,16 @@ class MainWindow(QMainWindow, WindowMixin):
         current_index = self.m_img_list.index(self.file_path)
         if current_index - 1 >= 0:
             prev_file_path = self.m_img_list[current_index - 1]
+            self.label_list.clear()
             self.show_bounding_box_from_annotation_file(prev_file_path)
+            self.save_file()
+
+    def copy_next_bounding_boxes(self):
+        current_index = self.m_img_list.index(self.file_path)
+        if current_index + 1 < self.img_count:
+            next_file_path = self.m_img_list[current_index + 1]
+            self.label_list.clear()
+            self.show_bounding_box_from_annotation_file(next_file_path)
             self.save_file()
 
     def toggle_paint_labels_option(self):

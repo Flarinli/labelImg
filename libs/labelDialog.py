@@ -17,6 +17,7 @@ class LabelDialog(QDialog):
         super(LabelDialog, self).__init__(parent)
 
         self.edit = QLineEdit()
+        self.edit.setVisible(False)
         self.edit.setText(text)
         self.edit.setValidator(label_validator())
         self.edit.editingFinished.connect(self.post_process)
