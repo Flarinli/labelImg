@@ -30,7 +30,11 @@ class StringBundle:
         # paths = self.__create_lookup_fallback_list(locale_str)
         # for path in paths:
         #     self.__load_bundle(path)
-        path = os.path.normpath('resources/strings/strings.properties')
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            path = os.path.join(sys._MEIPASS, 'strings.properties')
+        except Exception:
+            path = os.path.normpath('resources/strings/strings.properties')
         self.__load_bundle(path)
 
     @classmethod

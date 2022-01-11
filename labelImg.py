@@ -1557,12 +1557,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def load_predefined_classes(self, predef_classes_file):
         if os.path.exists(predef_classes_file) is True:
             with codecs.open(predef_classes_file, 'r', 'utf8') as f:
-                for line in f:
-                    line = line.strip()
-                    if self.label_hist is None:
-                        self.label_hist = [line]
-                    else:
-                        self.label_hist.append(line)
+                self.label_hist = [line.strip() for line in f]
         else:
             raise ValueError(f"predefined_classes.txt must be in directory {os.path.dirname(predef_classes_file)}")
 
