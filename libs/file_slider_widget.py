@@ -10,8 +10,8 @@ class FileSliderWidget(QWidget):
       super(FileSliderWidget, self).__init__(parent)
 
       # Validation of function input
-      self.max_value = max(max_value, 0)
-      self.file_index = min((max(cur_img_num - 1, 0), self.max_value - 1))
+      self.max_value = max(max_value - 1, 0)
+      self.file_index = min(max(cur_img_num, 0), self.max_value)
 
       self.main_window = main_window
 
@@ -19,10 +19,10 @@ class FileSliderWidget(QWidget):
 
       self.sl = QSlider(Qt.Horizontal)
       self.sl.setMinimum(0)
-      self.sl.setMaximum(max_value - 1)
+      self.sl.setMaximum(self.max_value)
       self.sl.setValue(self.file_index)
       self.sl.setTickPosition(QSlider.TicksBelow)
-      self.sl.setTickInterval(5 if max_value > 10 else 1)
+      self.sl.setTickInterval(5 if self.max_value > 9 else 1)
 
       layout.addWidget(self.sl)
       self.sl.valueChanged.connect(self.slider_change)
@@ -36,13 +36,13 @@ class FileSliderWidget(QWidget):
       self.setLayout(layout)
 
    def set_max_value(self, value):
-      self.max_value = max(value, 0)
-      self.sl.setMaximum(self.max_value - 1)
+      self.max_value = max(value - 1, 0)
+      self.sl.setMaximum(self.max_value)
 
    def slider_change(self):
       self.file_index = self.sl.value()
       self.l1.setText(str(self.file_index + 1))
-      self.file_index_changed()  # TODO: bad practice, ewww :0
+      self.file_index_changed()
 
    def keyPressEvent(self, qKeyEvent):
       # TODO: Clear input by double clicking on the input field
@@ -51,10 +51,9 @@ class FileSliderWidget(QWidget):
          if not input_text:
             input_text = str(self.file_index + 1)
             self.l1.setText(input_text)
-         input = min(self.max_value, int(input_text))
-         self.file_index = input - 1
+         self.file_index = max(min(int(input_text) - 1, self.max_value), 0)
          self.sl.setValue(self.file_index)
-         self.l1.setText(str(input))
+         self.l1.setText(str(self.file_index + 1))
          self.file_index_changed()
       else:
          super().keyPressEvent(qKeyEvent)
