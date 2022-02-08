@@ -29,6 +29,8 @@ except ImportError:
     from PyQt4.QtGui import *
     from PyQt4.QtCore import *
 
+from ordered_set import OrderedSet
+
 from libs.combobox import ComboBox
 from libs.resources import *
 from libs.constants import *
@@ -96,6 +98,9 @@ class MainWindow(QMainWindow, WindowMixin):
         # Save as Pascal voc xml
         self.default_save_dir = default_save_dir
         self.label_file_format = settings.get(SETTING_LABEL_FILE_FORMAT, LabelFileFormat.PASCAL_VOC)
+
+        # For desicion of opening unlabelled files or last opened
+        self.unlabelled_on_startup = settings.get(SETTING_UNLABELLED_ON_STARTUP, True)
 
         # For loading all image under a directory
         self.m_img_list = []
@@ -281,6 +286,15 @@ class MainWindow(QMainWindow, WindowMixin):
             'd',
             'next',
             get_str('nextImgDetail')
+        )
+
+        open_first_unlabelled_image = action(
+            get_str('openUnlabelled'),
+            self.open_first_unlabelled_image,
+            'Ctrl+Alt+N',
+            'open',
+            get_str('openUnlabelledDetail'),
+            enabled=True
         )
 
         open_prev_image = action(
@@ -602,6 +616,7 @@ class MainWindow(QMainWindow, WindowMixin):
             edit=self.menu(get_str('menu_edit')),
             view=self.menu(get_str('menu_view')),
             help=self.menu(get_str('menu_help')),
+            other=self.menu(get_str('menu_other')),
             recentFiles=QMenu(get_str('menu_openRecent')),
             labelList=label_menu)
 
@@ -661,7 +676,14 @@ class MainWindow(QMainWindow, WindowMixin):
             fit_width
         ))
 
-        self.menus.file.aboutToShow.connect(self.update_file_menu)
+        def toggle_startup_unlabelled_file_mode():
+            self.unlabelled_on_startup = not self.unlabelled_on_startup
+
+        self.open_unlabelled_file_at_startup_option = QAction(get_str('unlabelledImagesOnStartup'), self)
+        self.open_unlabelled_file_at_startup_option.setCheckable(True)
+        self.open_unlabelled_file_at_startup_option.setChecked(settings.get(SETTING_UNLABELLED_ON_STARTUP, True))
+        self.open_unlabelled_file_at_startup_option.triggered.connect(toggle_startup_unlabelled_file_mode)
+        add_actions(self.menus.other, [self.open_unlabelled_file_at_startup_option])
 
         # Custom context menu for the canvas widget:
         add_actions(self.canvas.menus[0], self.actions.beginnerContext)
@@ -676,10 +698,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.beginner = (
             open,
             open_dir,
-            change_save_dir,
             open_predefined_classes,
+            open_first_unlabelled_image,
             open_next_image,
             open_prev_image,
+            None,
             verify,
             save,
             save_format,
@@ -691,8 +714,6 @@ class MainWindow(QMainWindow, WindowMixin):
             zoom_in,
             zoom,
             zoom_out,
-            fit_window,
-            fit_width
         )
 
         self.actions.advanced = (
@@ -700,6 +721,7 @@ class MainWindow(QMainWindow, WindowMixin):
             open_dir,
             change_save_dir,
             open_predefined_classes,
+            open_first_unlabelled_image,
             open_next_image,
             open_prev_image,
             save,
@@ -790,9 +812,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.statusBar().addPermanentWidget(self.label_coordinates)
         recent_files = settings.get(SETTING_RECENT_FILES)
         self.file_path = recent_files[0] if recent_files else None
-        # Open Dir if default file
-        if self.file_path and os.path.isdir(os.path.dirname(self.file_path)):
-            self.import_dir_images(file_path=self.file_path)
+        if self.file_path and self.unlabelled_on_startup:
+            self.file_path = self.get_first_unlabelled_image(os.path.dirname(self.file_path))
+
+        self.open_file_dialog(silent=True, filename=self.file_path)
+
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
@@ -1128,6 +1152,13 @@ class MainWindow(QMainWindow, WindowMixin):
         unique_text_list.sort()
 
         self.combo_box.update_items(unique_text_list)
+
+    def open_first_unlabelled_image(self):
+        if self.file_path:
+            self.import_dir_images(file_path=self.get_first_unlabelled_image(folder_path=os.path.dirname(self.file_path)))
+        elif self.dir_name:
+            self.import_dir_images(file_path=self.get_first_unlabelled_image(folder_path=self.dir_name))
+
 
     def save_labels(self, annotation_file_path):
         annotation_file_path = ustr(annotation_file_path)
@@ -1512,11 +1543,7 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_FILL_COLOR] = self.fill_color
         settings[SETTING_RECENT_FILES] = self.recent_files
         settings[SETTING_ADVANCE_MODE] = not self._beginner
-        # if self.default_save_dir and os.path.exists(self.default_save_dir):
-        #     settings[SETTING_SAVE_DIR] = ustr(self.default_save_dir)
-        # else:
-        #     settings[SETTING_SAVE_DIR] = ''
-
+        settings[SETTING_UNLABELLED_ON_STARTUP] = self.unlabelled_on_startup
         if self.last_open_dir and os.path.exists(self.last_open_dir):
             settings[SETTING_LAST_OPEN_DIR] = self.last_open_dir
         else:
@@ -1545,6 +1572,46 @@ class MainWindow(QMainWindow, WindowMixin):
                     images.append(path)
         natural_sort(images, key=lambda x: os.path.normpath(x.lower()))
         return images
+
+    def get_all_labeled_images_names(self, folder_path):
+        extensions = ['%s' % fmt for fmt in (XML_EXT, JSON_EXT, TXT_EXT)]
+        labeled_images = []
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(tuple(extensions)):
+                    relative_path = os.path.join(root, file)
+                    path = ustr(os.path.abspath(relative_path))
+                    labeled_images.append(os.path.splitext(os.path.basename(path))[0])
+        natural_sort(labeled_images, key=lambda x: x.lower())
+        return OrderedSet(labeled_images)
+
+    def get_all_unlabelled_images(self, folder_path=None):
+        extensions = ['.%s' % fmt for fmt in (XML_EXT, JSON_EXT, TXT_EXT)]
+        images = []
+        labeled_images_names = self.get_all_labeled_images_names(folder_path)
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(tuple(extensions)):
+                    relative_path = os.path.join(root, file)
+                    path = ustr(os.path.abspath(relative_path))
+                    if os.path.splitext(os.path.basename(path))[0] not in labeled_images_names:
+                        images.append(path)
+        natural_sort(images, key=lambda x: os.path.normpath(x.lower()))
+        return images
+
+    def get_first_unlabelled_image(self, folder_path=None):
+        extensions = ['.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
+        dirname = os.path.join(os.path.dirname(folder_path), f'label files ({os.path.basename(folder_path)})')
+        labeled_images_names = self.get_all_labeled_images_names(dirname)
+        path = ''
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(tuple(extensions)):
+                    relative_path = os.path.join(root, file)
+                    path = ustr(os.path.abspath(relative_path))
+                    if os.path.splitext(os.path.basename(path))[0] not in labeled_images_names:
+                        return path
+        return path
 
     def change_save_dir_dialog(self, _value=False):
         if self.default_save_dir is not None:
@@ -1597,6 +1664,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                                                     QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
         else:
             target_dir_path = ustr(default_open_dir_path)
+        if not target_dir_path:
+            return
         self.last_open_dir = target_dir_path
         self.m_img_list = self.scan_all_images(target_dir_path)
         self.import_dir_images(dir_path=target_dir_path)
@@ -1711,13 +1780,17 @@ class MainWindow(QMainWindow, WindowMixin):
         if filename:
             self.load_file(filename)
 
-    def open_file_dialog(self, _value=False):
+    def open_file_dialog(self, _value=False, silent=False, filename=None):
         if not self.may_continue():
             return
-        path = os.path.dirname(ustr(self.file_path)) if self.file_path else '.'
-        formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
-        filters = "Image & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
-        filename = QFileDialog.getOpenFileName(self, '%s - Choose Image or Label file' % __appname__, path, filters)
+        if not silent:
+            path = os.path.dirname(ustr(self.file_path)) if self.file_path else '.'
+            formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
+            filters = "Image & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
+            filename = QFileDialog.getOpenFileName(self, '%s - Choose Image or Label file' % __appname__, path, filters)
+        else:
+            filename = ustr(filename)
+
         if filename and isinstance(filename, (tuple, list)):
             filename = filename[0]
         if filename:
@@ -1755,7 +1828,6 @@ class MainWindow(QMainWindow, WindowMixin):
                 image_file_name = os.path.basename(self.file_path)
                 saved_file_name = os.path.splitext(image_file_name)[0]
                 saved_path = os.path.join(ustr(self.default_save_dir), saved_file_name)
-                print(image_file_name, saved_file_name, saved_path, self.default_save_dir)
                 self._save_file(saved_path)
         else:
             image_file_dir = os.path.dirname(self.file_path)
