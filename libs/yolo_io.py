@@ -90,8 +90,8 @@ class YoloReader:
         self.file_path = file_path
 
         if class_list_path is None:
-            dir_path = os.path.dirname(os.path.realpath(self.file_path))
-            self.class_list_path = os.path.join(dir_path, "classes.txt")
+            dir_path = os.path.dirname(os.path.dirname(os.path.realpath(self.file_path)))
+            self.class_list_path = os.path.join(dir_path, "predefined_classes.txt")
         else:
             self.class_list_path = class_list_path
 
