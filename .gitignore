@@ -25,3 +25,8 @@ cscope*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+.env/
+.venv/
+env/
+venv/
